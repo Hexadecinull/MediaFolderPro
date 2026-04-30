@@ -77,7 +77,6 @@ jobs:
   build-windows:
     name: Build Windows EXE
     runs-on: windows-latest
-    if: startsWith(github.ref, 'refs/tags/v')
     needs: [ lint-and-syntax, import-check ]
 
     steps:
@@ -108,7 +107,8 @@ jobs:
       - name: Rename artifact
         shell: pwsh
         run: |
-          Move-Item dist\MediaFolderPro.exe "dist\MediaFolderPro-${{ github.ref_name }}-windows.exe"
+          $tag = "${{ github.ref_name }}" -replace '[/\\]', '-'
+          Move-Item dist\MediaFolderPro.exe "dist\MediaFolderPro-${tag}-windows.exe"
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
@@ -123,7 +123,6 @@ jobs:
   build-ubuntu:
     name: Build Ubuntu Package
     runs-on: ubuntu-22.04
-    if: startsWith(github.ref, 'refs/tags/v')
     needs: [ lint-and-syntax, import-check ]
 
     steps:
@@ -212,7 +211,6 @@ jobs:
   build-macos:
     name: Build macOS App
     runs-on: macos-14
-    if: startsWith(github.ref, 'refs/tags/v')
     needs: [ lint-and-syntax, import-check ]
 
     steps:
@@ -275,7 +273,6 @@ jobs:
   build-android:
     name: Build Android APK
     runs-on: ubuntu-22.04
-    if: startsWith(github.ref, 'refs/tags/v')
     needs: [ lint-and-syntax, import-check ]
 
     steps:
