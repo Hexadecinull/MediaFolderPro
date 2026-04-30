@@ -1,0 +1,397 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  # ─────────────────────────────────────────────
+  # 1. Lint & Syntax
+  # ─────────────────────────────────────────────
+  lint-and-syntax:
+    name: Lint & Syntax Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 Pillow pyflakes
+
+      - name: Syntax check — desktop
+        run: python -c "import ast; ast.parse(open('mediafolder.py').read()); print('mediafolder.py OK')"
+
+      - name: Syntax check — android
+        run: python -c "import ast; ast.parse(open('mediafolder_android.py').read()); print('mediafolder_android.py OK')"
+
+      - name: Pyflakes — desktop
+        run: python -m pyflakes mediafolder.py || true
+
+      - name: Pyflakes — android
+        run: python -m pyflakes mediafolder_android.py || true
+
+  # ─────────────────────────────────────────────
+  # 2. Import / Dependency Check
+  # ─────────────────────────────────────────────
+  import-check:
+    name: Import & Dependency Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 Pillow
+
+      - name: Check required imports are available
+        run: |
+          python -c "import requests; print('requests OK')"
+          python -c "import bs4; print('beautifulsoup4 OK')"
+          python -c "from PIL import Image; print('Pillow OK')"
+          python -c "import tkinter; print('tkinter OK')"
+          python -c "import threading, os, re, math, time, json; print('stdlib OK')"
+
+  # ─────────────────────────────────────────────
+  # 3. Windows — PyInstaller EXE
+  # ─────────────────────────────────────────────
+  build-windows:
+    name: Build Windows EXE
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ lint-and-syntax, import-check ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 Pillow pyinstaller
+
+      - name: Build EXE
+        shell: pwsh
+        run: |
+          $iconArg = if (Test-Path "resources/icon.ico") { "--icon=resources/icon.ico" } else { "" }
+          pyinstaller `
+            --onefile `
+            --windowed `
+            --name "MediaFolderPro" `
+            $iconArg `
+            mediafolder.py
+
+      - name: Rename artifact
+        shell: pwsh
+        run: |
+          Move-Item dist\MediaFolderPro.exe "dist\MediaFolderPro-${{ github.ref_name }}-windows.exe"
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MediaFolderPro-windows
+          path: dist/MediaFolderPro-${{ github.ref_name }}-windows.exe
+          retention-days: 30
+
+  # ─────────────────────────────────────────────
+  # 4. Ubuntu — PyInstaller binary + .deb package
+  # ─────────────────────────────────────────────
+  build-ubuntu:
+    name: Build Ubuntu Package
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ lint-and-syntax, import-check ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-tk dpkg-dev fakeroot
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 Pillow pyinstaller
+
+      - name: Build binary
+        run: |
+          pyinstaller \
+            --onefile \
+            --windowed \
+            --name "mediafolderpro" \
+            mediafolder.py
+
+      - name: Package as .deb
+        run: |
+          VERSION=${{ github.ref_name }}
+          VERSION=${VERSION#v}
+          PKG=mediafolderpro_${VERSION}_amd64
+
+          mkdir -p ${PKG}/usr/bin
+          mkdir -p ${PKG}/usr/share/applications
+          mkdir -p ${PKG}/DEBIAN
+
+          cp dist/mediafolderpro ${PKG}/usr/bin/mediafolderpro
+          chmod +x ${PKG}/usr/bin/mediafolderpro
+
+          cat > ${PKG}/usr/share/applications/mediafolderpro.desktop << 'EOF'
+          [Desktop Entry]
+          Name=MediaFolder Pro
+          Comment=MediaFire folder downloader
+          Exec=mediafolderpro
+          Icon=mediafolderpro
+          Terminal=false
+          Type=Application
+          Categories=Network;FileTransfer;
+          EOF
+
+          cat > ${PKG}/DEBIAN/control << EOF
+          Package: mediafolderpro
+          Version: ${VERSION}
+          Section: net
+          Priority: optional
+          Architecture: amd64
+          Depends: python3
+          Maintainer: SSMG4 <noreply@github.com>
+          Description: MediaFolder Pro
+           A fast, full-featured MediaFire folder downloader.
+          EOF
+
+          fakeroot dpkg-deb --build ${PKG}
+          mv ${PKG}.deb MediaFolderPro-${{ github.ref_name }}-ubuntu-amd64.deb
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MediaFolderPro-ubuntu
+          path: MediaFolderPro-${{ github.ref_name }}-ubuntu-amd64.deb
+          retention-days: 30
+
+      - name: Upload standalone binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: MediaFolderPro-ubuntu-bin
+          path: dist/mediafolderpro
+          retention-days: 30
+
+  # ─────────────────────────────────────────────
+  # 5. macOS — PyInstaller .app + .dmg
+  # ─────────────────────────────────────────────
+  build-macos:
+    name: Build macOS App
+    runs-on: macos-14
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ lint-and-syntax, import-check ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 Pillow pyinstaller
+
+      - name: Build .app bundle
+        run: |
+          pyinstaller \
+            --onefile \
+            --windowed \
+            --name "MediaFolderPro" \
+            --osx-bundle-identifier "one.apizutool.mediafolderpro" \
+            mediafolder.py
+
+      - name: Create .dmg
+        run: |
+          brew install create-dmg 2>/dev/null || true
+          if command -v create-dmg &>/dev/null; then
+            mkdir -p dmg_stage
+            cp -R "dist/MediaFolderPro.app" dmg_stage/
+            create-dmg \
+              --volname "MediaFolder Pro" \
+              --window-pos 200 120 \
+              --window-size 600 400 \
+              --icon-size 100 \
+              --icon "MediaFolderPro.app" 175 190 \
+              --hide-extension "MediaFolderPro.app" \
+              --app-drop-link 425 190 \
+              "MediaFolderPro-${{ github.ref_name }}-macos.dmg" \
+              "dmg_stage/"
+          else
+            hdiutil create \
+              -volname "MediaFolderPro" \
+              -srcfolder "dist/MediaFolderPro.app" \
+              -ov -format UDZO \
+              "MediaFolderPro-${{ github.ref_name }}-macos.dmg"
+          fi
+
+      - name: Upload .dmg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MediaFolderPro-macos
+          path: MediaFolderPro-${{ github.ref_name }}-macos.dmg
+          retention-days: 30
+
+  # ─────────────────────────────────────────────
+  # 6. Android — Buildozer APK
+  # ─────────────────────────────────────────────
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ lint-and-syntax, import-check ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare main.py for Buildozer
+        run: cp mediafolder_android.py main.py
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            git zip unzip autoconf libtool pkg-config \
+            zlib1g-dev libncurses5-dev libffi-dev libssl-dev \
+            cmake build-essential
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Buildozer & Cython
+        run: |
+          python -m pip install --upgrade pip
+          pip install buildozer cython==0.29.37
+
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-
+
+      - name: Build APK
+        run: buildozer android debug 2>&1 | tee buildozer.log
+        timeout-minutes: 60
+
+      - name: Rename APK
+        run: |
+          APK=$(find bin/ -name "*.apk" | head -1)
+          cp "$APK" "MediaFolderPro-${{ github.ref_name }}-android-debug.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MediaFolderPro-android
+          path: MediaFolderPro-${{ github.ref_name }}-android-debug.apk
+          retention-days: 30
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildozer-log
+          path: buildozer.log
+          retention-days: 7
+
+  # ─────────────────────────────────────────────
+  # 7. GitHub Release — attaches all built artifacts
+  # ─────────────────────────────────────────────
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ build-windows, build-ubuntu, build-macos, build-android ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts/
+
+      - name: List artifacts
+        run: find release-artifacts/ -type f
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: MediaFolder Pro ${{ github.ref_name }}
+          body: |
+            ## MediaFolder Pro ${{ github.ref_name }}
+
+            ### Downloads
+
+            | Platform | File |
+            |---|---|
+            | 🪟 Windows | `MediaFolderPro-${{ github.ref_name }}-windows.exe` |
+            | 🐧 Ubuntu | `MediaFolderPro-${{ github.ref_name }}-ubuntu-amd64.deb` |
+            | 🍎 macOS | `MediaFolderPro-${{ github.ref_name }}-macos.dmg` |
+            | 🤖 Android | `MediaFolderPro-${{ github.ref_name }}-android-debug.apk` |
+
+            ### Install
+
+            - **Windows** — run the `.exe` directly, no install needed
+            - **Ubuntu** — `sudo dpkg -i MediaFolderPro-*-ubuntu-amd64.deb`
+            - **macOS** — open the `.dmg` and drag to Applications
+            - **Android** — enable _Install from unknown sources_, then install the `.apk`
+
+            ---
+            See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) for full documentation.
+          files: |
+            release-artifacts/**/*.exe
+            release-artifacts/**/*.deb
+            release-artifacts/**/*.dmg
+            release-artifacts/**/*.apk
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

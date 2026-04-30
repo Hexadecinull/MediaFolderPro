@@ -1,0 +1,46 @@
+# Default behaviour
+* text=auto
+
+# Python source
+*.py text eol=lf diff=python
+
+# Markdown / docs
+*.md text eol=lf
+*.txt text eol=lf
+*.rst text eol=lf
+
+# Config / data
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.spec text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+
+# Windows scripts
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Images — binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+
+# Compiled Python — binary
+*.pyc binary
+*.pyo binary
+*.pyd binary
+
+# APK / AAB — binary
+*.apk binary
+*.aab binary
+*.keystore binary
+*.jks binary
