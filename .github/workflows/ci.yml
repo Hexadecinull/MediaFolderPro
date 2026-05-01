@@ -315,23 +315,38 @@ jobs:
           python -m pip install --upgrade pip
           pip install buildozer cython==0.29.37
 
-      - name: Cache Buildozer global directory
-        uses: actions/cache@v4
-        with:
-          path: ~/.buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-${{ runner.os }}-
-
       - name: Accept Android SDK licenses
         run: |
-          mkdir -p "$HOME/.android"
-          touch "$HOME/.android/repositories.cfg"
-          yes | buildozer android debug --version 2>/dev/null || true
+          # Use the SDK that ships with the GitHub runner — already downloaded,
+          # just needs licenses accepted.
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses 2>/dev/null || \
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" --licenses 2>/dev/null || \
+          true
+
+      - name: Configure Buildozer to use runner SDK
+        run: |
+          # Point buildozer at the pre-installed SDK so it doesn't re-download it.
+          echo "ANDROIDSDK=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROIDNDK=" >> $GITHUB_ENV
+          echo "ANDROIDAPI=33" >> $GITHUB_ENV
+          echo "ANDROIDMINAPI=21" >> $GITHUB_ENV
+          # Create .buildozer dir so p4a picks up the SDK path
+          mkdir -p .buildozer/android/platform
+          ln -sfn "$ANDROID_SDK_ROOT" .buildozer/android/platform/android-sdk
+
+      - name: Cache python-for-android build
+        uses: actions/cache@v4
+        with:
+          path: |
+            .buildozer/android/platform/build-arm64-v8a_armeabi-v7a
+            .buildozer/android/platform/python-for-android
+          key: p4a-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'requirements-android.txt') }}
+          restore-keys: |
+            p4a-${{ runner.os }}-
 
       - name: Build APK
         run: yes | buildozer android debug 2>&1 | tee buildozer.log
-        timeout-minutes: 60
+        timeout-minutes: 90
 
       - name: Copy APK to workspace root
         run: |
@@ -341,7 +356,7 @@ jobs:
           fi
           TAG="${{ github.ref_name }}"
           cp "$APK" "MediaFolderPro-${TAG}-android-debug.apk"
-          echo "APK copied: MediaFolderPro-${TAG}-android-debug.apk"
+          echo "APK: MediaFolderPro-${TAG}-android-debug.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
