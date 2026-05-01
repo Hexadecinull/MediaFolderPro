@@ -96,13 +96,16 @@ jobs:
       - name: Build EXE
         shell: pwsh
         run: |
-          $iconArg = if (Test-Path "resources/icon.ico") { "--icon=resources/icon.ico" } else { "" }
-          pyinstaller `
-            --onefile `
-            --windowed `
-            --name "MediaFolderPro" `
-            $iconArg `
-            mediafolder.py
+          $args = @(
+            '--onefile',
+            '--windowed',
+            '--name', 'MediaFolderPro',
+            'mediafolder.py'
+          )
+          if (Test-Path "resources/icon.ico") {
+            $args = @('--icon=resources/icon.ico') + $args
+          }
+          pyinstaller @args
 
       - name: Rename artifact
         shell: pwsh
@@ -114,7 +117,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MediaFolderPro-windows
-          path: dist/MediaFolderPro-${{ github.ref_name }}-windows.exe
+          path: dist/MediaFolderPro-*-windows.exe
           retention-days: 30
 
   # ─────────────────────────────────────────────
@@ -154,8 +157,12 @@ jobs:
 
       - name: Package as .deb
         run: |
-          VERSION=${{ github.ref_name }}
-          VERSION=${VERSION#v}
+          RAW="${{ github.ref_name }}"
+          # Strip leading v; fall back to 0.0.0 if not a semver tag
+          VERSION="${RAW#v}"
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+'; then
+            VERSION="0.0.0"
+          fi
           PKG=mediafolderpro_${VERSION}_amd64
 
           mkdir -p ${PKG}/usr/bin
@@ -195,7 +202,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MediaFolderPro-ubuntu
-          path: MediaFolderPro-${{ github.ref_name }}-ubuntu-amd64.deb
+          path: MediaFolderPro-*-ubuntu-amd64.deb
           retention-days: 30
 
       - name: Upload standalone binary
@@ -238,6 +245,8 @@ jobs:
 
       - name: Create .dmg
         run: |
+          TAG="${{ github.ref_name }}"
+          DMG_NAME="MediaFolderPro-${TAG}-macos.dmg"
           brew install create-dmg 2>/dev/null || true
           if command -v create-dmg &>/dev/null; then
             mkdir -p dmg_stage
@@ -250,21 +259,21 @@ jobs:
               --icon "MediaFolderPro.app" 175 190 \
               --hide-extension "MediaFolderPro.app" \
               --app-drop-link 425 190 \
-              "MediaFolderPro-${{ github.ref_name }}-macos.dmg" \
+              "$DMG_NAME" \
               "dmg_stage/"
           else
             hdiutil create \
               -volname "MediaFolderPro" \
               -srcfolder "dist/MediaFolderPro.app" \
               -ov -format UDZO \
-              "MediaFolderPro-${{ github.ref_name }}-macos.dmg"
+              "$DMG_NAME"
           fi
 
       - name: Upload .dmg artifact
         uses: actions/upload-artifact@v4
         with:
           name: MediaFolderPro-macos
-          path: MediaFolderPro-${{ github.ref_name }}-macos.dmg
+          path: MediaFolderPro-*-macos.dmg
           retention-days: 30
 
   # ─────────────────────────────────────────────
@@ -314,20 +323,31 @@ jobs:
           restore-keys: |
             buildozer-${{ runner.os }}-
 
+      - name: Accept Android SDK licenses
+        run: |
+          mkdir -p "$HOME/.android"
+          touch "$HOME/.android/repositories.cfg"
+          yes | buildozer android debug --version 2>/dev/null || true
+
       - name: Build APK
-        run: buildozer android debug 2>&1 | tee buildozer.log
+        run: yes | buildozer android debug 2>&1 | tee buildozer.log
         timeout-minutes: 60
 
-      - name: Rename APK
+      - name: Copy APK to workspace root
         run: |
-          APK=$(find bin/ -name "*.apk" | head -1)
-          cp "$APK" "MediaFolderPro-${{ github.ref_name }}-android-debug.apk"
+          APK=$(find bin/ -name "*.apk" 2>/dev/null | head -1)
+          if [ -z "$APK" ]; then
+            echo "ERROR: No APK found in bin/" && exit 1
+          fi
+          TAG="${{ github.ref_name }}"
+          cp "$APK" "MediaFolderPro-${TAG}-android-debug.apk"
+          echo "APK copied: MediaFolderPro-${TAG}-android-debug.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: MediaFolderPro-android
-          path: MediaFolderPro-${{ github.ref_name }}-android-debug.apk
+          path: MediaFolderPro-*-android-debug.apk
           retention-days: 30
 
       - name: Upload build log on failure
