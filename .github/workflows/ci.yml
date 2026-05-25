@@ -315,24 +315,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install buildozer cython==0.29.37
 
-      - name: Accept Android SDK licenses
+      - name: Install Android NDK 27c and platform tools
         run: |
-          # Use the SDK that ships with the GitHub runner — already downloaded,
-          # just needs licenses accepted.
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses 2>/dev/null || \
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" --licenses 2>/dev/null || \
-          true
-
-      - name: Configure Buildozer to use runner SDK
-        run: |
-          # Point buildozer at the pre-installed SDK so it doesn't re-download it.
-          echo "ANDROIDSDK=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "ANDROIDNDK=" >> $GITHUB_ENV
-          echo "ANDROIDAPI=33" >> $GITHUB_ENV
-          echo "ANDROIDMINAPI=21" >> $GITHUB_ENV
-          # Create .buildozer dir so p4a picks up the SDK path
-          mkdir -p .buildozer/android/platform
-          ln -sfn "$ANDROID_SDK_ROOT" .buildozer/android/platform/android-sdk
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses 2>/dev/null || true
+          yes | "$SDKMANAGER" "ndk;27.2.12479018" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Cache python-for-android build
         uses: actions/cache@v4
@@ -345,6 +332,11 @@ jobs:
             p4a-${{ runner.os }}-
 
       - name: Build APK
+        env:
+          ANDROIDSDK: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROIDNDK: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.2.12479018
+          ANDROIDAPI: "35"
+          ANDROIDMINAPI: "21"
         run: yes | buildozer android debug 2>&1 | tee buildozer.log
         timeout-minutes: 90
 
