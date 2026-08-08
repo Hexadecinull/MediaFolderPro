@@ -340,13 +340,13 @@ jobs:
         run: yes | buildozer android debug 2>&1 | tee buildozer.log
         timeout-minutes: 90
 
-       - name: Debug APK output
-         run: |
-           echo "=== FILE TREE (partial) ==="
-           ls -R | head -200
+      - name: Debug APK output
+        run: |
+          echo "=== FILE TREE (partial) ==="
+          ls -R | head -200
 
-           echo "=== SEARCHING FOR APK ==="
-           find . -name "*.apk" || true
+          echo "=== SEARCHING FOR APK ==="
+          find . -name "*.apk" || true
 
       - name: Copy APK to workspace root
         run: |
