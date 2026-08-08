@@ -348,6 +348,11 @@ jobs:
           echo "=== SEARCHING FOR APK ==="
           find . -name "*.apk" || true
 
+      - name: Show build failure
+        run: |
+          echo "=== LAST 200 LINES OF BUILDOZER LOG ==="
+          tail -n 200 buildozer.log
+
       - name: Copy APK to workspace root
         run: |
           APK=$(find bin/ -name "*.apk" 2>/dev/null | head -1)
