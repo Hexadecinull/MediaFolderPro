@@ -345,8 +345,8 @@ jobs:
            echo "=== FILE TREE (partial) ==="
            ls -R | head -200
 
-    echo "=== SEARCHING FOR APK ==="
-    find . -name "*.apk" || true
+           echo "=== SEARCHING FOR APK ==="
+           find . -name "*.apk" || true
 
       - name: Copy APK to workspace root
         run: |
