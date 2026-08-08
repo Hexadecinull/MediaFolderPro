@@ -305,10 +305,10 @@ jobs:
             zlib1g-dev libncurses5-dev libffi-dev libssl-dev \
             cmake build-essential
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.10"
 
       - name: Install Buildozer & Cython
         run: |
@@ -339,19 +339,6 @@ jobs:
           ANDROIDMINAPI: "21"
         run: yes | buildozer android debug 2>&1 | tee buildozer.log
         timeout-minutes: 90
-
-      - name: Debug APK output
-        run: |
-          echo "=== FILE TREE (partial) ==="
-          ls -R | head -200
-
-          echo "=== SEARCHING FOR APK ==="
-          find . -name "*.apk" || true
-
-      - name: Show build failure
-        run: |
-          echo "=== LAST 200 LINES OF BUILDOZER LOG ==="
-          tail -n 200 buildozer.log
 
       - name: Copy APK to workspace root
         run: |
